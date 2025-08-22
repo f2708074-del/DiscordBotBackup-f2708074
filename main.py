@@ -1,8 +1,8 @@
 import os
 import sys
 import importlib.util
-from dotenv import load_dotenv
 from cryptography.fernet import Fernet
+from dotenv import load_dotenv
 
 # Cargar variables de entorno
 load_dotenv()
@@ -10,78 +10,86 @@ load_dotenv()
 # Configuración
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
 ENCRYPTED_EXTENSION = '.encrypted'
-MAIN_SCRIPT = 'bot_main'  # Nombre del módulo principal (sin extensión)
 
 def decrypt_file(encrypted_path, output_path):
     """Desencripta un archivo y lo guarda en la ruta especificada"""
     try:
+        cipher = Fernet(ENCRYPTION_KEY)
+        
         with open(encrypted_path, 'rb') as f:
             encrypted_data = f.read()
         
-        cipher = Fernet(ENCRYPTION_KEY)
         decrypted_data = cipher.decrypt(encrypted_data)
         
         with open(output_path, 'wb') as f:
             f.write(decrypted_data)
         
+        print(f"✓ {encrypted_path} desencriptado correctamente")
         return True
     except Exception as e:
-        print(f"Error desencriptando {encrypted_path}: {e}")
+        print(f"✗ Error desencriptando {encrypted_path}: {e}")
         return False
 
-def load_module(module_name, file_path):
-    """Carga un módulo desde una ruta específica"""
-    try:
-        spec = importlib.util.spec_from_file_location(module_name, file_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-    except Exception as e:
-        print(f"Error cargando módulo {module_name}: {e}")
-        return None
-
-def main():
-    # Verificar si la clave de encriptación está configurada
+def decrypt_all_files():
+    """Desencripta todos los archivos con extensión .encrypted en el directorio"""
     if not ENCRYPTION_KEY:
         print("ERROR: No se encontró ENCRYPTION_KEY en las variables de entorno")
-        sys.exit(1)
+        return False
     
-    # Ruta del script principal encriptado y no encriptado
-    encrypted_main = f"{MAIN_SCRIPT}{ENCRYPTED_EXTENSION}"
-    plain_main = f"{MAIN_SCRIPT}.py"
+    decrypted_count = 0
+    error_count = 0
     
-    # Determinar qué versión del script principal usar
-    main_script_path = None
+    # Recorrer todos los archivos en el directorio actual
+    for filename in os.listdir('.'):
+        if filename.endswith(ENCRYPTED_EXTENSION):
+            # Generar el nombre del archivo desencriptado
+            output_filename = filename[:-len(ENCRYPTED_EXTENSION)]
+            
+            # Desencriptar el archivo
+            if decrypt_file(filename, output_filename):
+                decrypted_count += 1
+            else:
+                error_count += 1
     
-    if os.path.exists(encrypted_main):
-        # Desencriptar y cargar la versión encriptada
-        temp_decrypted = "temp_decrypted.py"
-        if decrypt_file(encrypted_main, temp_decrypted):
-            main_script_path = temp_decrypted
-            print("✓ Script principal desencriptado correctamente")
-        else:
-            print("✗ Error desencriptando el script principal")
-    elif os.path.exists(plain_main):
-        # Usar la versión no encriptada
-        main_script_path = plain_main
-        print("✓ Usando script principal no encriptado")
-    else:
-        print("✗ No se encontró ningún script principal")
-        sys.exit(1)
+    print(f"\nDesencriptación completada: {decrypted_count} archivos desencriptados, {error_count} errores")
+    return error_count == 0
+
+def run_active_bot():
+    """Ejecuta el ActiveBot.py"""
+    if not os.path.exists('ActiveBot.py'):
+        print("ERROR: No se encontró ActiveBot.py")
+        return False
     
-    # Cargar y ejecutar el módulo principal
-    if main_script_path:
-        main_module = load_module(MAIN_SCRIPT, main_script_path)
+    try:
+        # Importar y ejecutar ActiveBot
+        spec = importlib.util.spec_from_file_location("ActiveBot", "ActiveBot.py")
+        active_bot = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(active_bot)
         
-        if main_module and hasattr(main_module, 'main'):
-            # Ejecutar la función main del módulo
-            main_module.main()
+        # Verificar si tiene una función main
+        if hasattr(active_bot, 'main'):
+            active_bot.main()
+            return True
         else:
-            print("✗ El script principal no tiene una función 'main'")
+            print("ERROR: ActiveBot.py no tiene una función 'main'")
+            return False
+    except Exception as e:
+        print(f"ERROR ejecutando ActiveBot.py: {e}")
+        return False
+
+def main():
+    """Función principal"""
+    print("Iniciando proceso de desencriptación...")
     
-    # Limpiar archivo temporal si existe
-    if 'temp_decrypted' in locals() and os.path.exists('temp_decrypted.py'):
-        os.remove('temp_decrypted.py')
+    # Desencriptar todos los archivos
+    success = decrypt_all_files()
+    
+    if success:
+        print("\nEjecutando ActiveBot...")
+        run_active_bot()
+    else:
+        print("No se pudo completar la desencriptación, abortando...")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
