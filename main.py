@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 import sys
+import subprocess
 
 def get_encryption_key():
     """Obtiene y deriva la clave desde la variable de entorno KEY_CODE"""
@@ -14,7 +15,6 @@ def get_encryption_key():
         if not key_code:
             raise ValueError("KEY_CODE no está definida en las variables de entorno")
         
-        print("✓ KEY_CODE encontrada en variables de entorno")
         
         # Decodifica la clave base64
         key = base64.urlsafe_b64decode(key_code)
@@ -31,18 +31,19 @@ def get_encryption_key():
                 backend=default_backend()
             )
             key = kdf.derive(key_code.encode())
-            print("✓ Clave derivada usando PBKDF2")
         else:
-            print("✓ Clave tiene el tamaño correcto (32 bytes)")
         
         return key
     except Exception as e:
         print(f"✗ Error al procesar la clave: {e}")
         sys.exit(1)
 
-def is_encrypted_file(content):
-    """Intenta determinar si el contenido está encriptado verificando si es base64 válido"""
+def is_encrypted_file(file_path):
+    """Verifica si un archivo está encriptado intentando decodificarlo como base64"""
     try:
+        with open(file_path, 'r') as f:
+            content = f.read().strip()
+        
         # Intenta decodificar el contenido como base64
         decoded = base64.b64decode(content)
         # Verifica que el contenido decodificado tenga al menos 16 bytes (IV)
@@ -50,12 +51,33 @@ def is_encrypted_file(content):
     except:
         return False
 
-def decrypt_file_content(encrypted_content, key):
-    """Descifra contenido en memoria usando AES-256 en modo CBC"""
+def decrypt_file_in_place(file_path, key):
+    """Descifra un archivo encriptado y lo sobrescribe con el contenido desencriptado"""
     try:
-        # Decodifica de Base64 a bytes
-        encrypted_data = base64.b64decode(encrypted_content)
         
+        # Verifica si el archivo de entrada existe y no está vacío
+        if not os.path.exists(file_path):
+            return True
+            
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            return True
+            
+        
+        # Lee el archivo cifrado (que está en Base64)
+        with open(file_path, 'r') as file:
+            encrypted_data_b64 = file.read()
+        
+        # Decodifica de Base64 a bytes
+        try:
+            encrypted_data = base64.b64decode(encrypted_data_b64)
+        except Exception as e:
+            return False
+            
+        # Verifica que tenga al menos 16 bytes (tamaño del IV)
+        if len(encrypted_data) < 16:
+            return True
+            
         # Separa el IV y el ciphertext
         iv = encrypted_data[:16]
         ciphertext = encrypted_data[16:]
@@ -75,53 +97,54 @@ def decrypt_file_content(encrypted_content, key):
         unpadder = padding.PKCS7(128).unpadder()
         plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
         
-        return plaintext.decode('utf-8')
+        # Guarda el archivo descifrado (sobrescribiendo el original)
+        with open(file_path, 'wb') as file:
+            file.write(plaintext)
+        
+        output_size = os.path.getsize(file_path)
+        
+        return True
     except Exception as e:
-        print(f"✗ Error al descifrar contenido: {e}")
-        return None
+        print(f"✗ Error al descifrar: {e}")
+        return False
 
 def main():
-    # Obtener la clave de encriptación
+    # Obtener la clave
     key = get_encryption_key()
     
-    # Recorrer todos los archivos del directorio actual y subdirectorios
+    # Lista de archivos y directorios a excluir
+    exclude_files = ['main.py', 'requirements.txt']
+    exclude_dirs = ['.git', '__pycache__', 'venv', 'env']
+    
+    print("Buscando archivos encriptados en el repositorio...")
+    
+    # Recorrer todos los archivos en el directorio actual y subdirectorios
     for root, dirs, files in os.walk('.'):
+        # Excluir directorios no deseados
+        dirs[:] = [d for d in dirs if d not in exclude_dirs]
+        
         for file in files:
+            if file in exclude_files:
+                continue
+                
             file_path = os.path.join(root, file)
             
-            # Saltar archivos específicos
-            if file in ['main.py', 'activebot.py']:
-                continue
-                
-            try:
-                # Leer el contenido del archivo
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                
-                # Verificar si el archivo parece estar encriptado
-                if is_encrypted_file(content):
-                    print(f"Procesando archivo encriptado: {file_path}")
-                    
-                    # Desencriptar el contenido
-                    decrypted_content = decrypt_file_content(content, key)
-                    
-                    if decrypted_content is not None:
-                        # Sobrescribir el archivo con el contenido desencriptado
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(decrypted_content)
-                        print(f"✓ Archivo desencriptado: {file_path}")
-                    else:
-                        print(f"✗ Error al desencriptar: {file_path}")
-            except Exception as e:
-                print(f"✗ Error procesando archivo {file_path}: {e}")
-                continue
+            # Verificar si el archivo está encriptado
+            if is_encrypted_file(file_path):
+                print(f"Archivo encriptado encontrado: {file_path}")
+                # Desencriptar el archivo
+                decrypt_file_in_place(file_path, key)
     
     # Ejecutar activebot.py después de desencriptar
     print("Ejecutando activebot.py...")
     try:
-        os.system('python activebot.py')
+        result = subprocess.run([sys.executable, 'activebot.py'], check=True)
+    except FileNotFoundError:
+        print("✗ activebot.py no encontrado")
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error al ejecutar activebot.py: {e}")
     except Exception as e:
-        print(f"Error ejecutando activebot.py: {e}")
+        print(f"✗ Error inesperado: {e}")
 
 if __name__ == "__main__":
     main()
