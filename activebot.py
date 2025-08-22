@@ -19,23 +19,14 @@ class SilentBot(commands.Bot):
         )
     
     async def setup_hook(self):
-        # Cargar comandos
         for filename in os.listdir('./commands'):
             if filename.endswith('.py') and filename != '__init__.py':
-                try:
-                    await self.load_extension(f'commands.{filename[:-3]}')
-                    print(f"✓ Comando {filename} cargado correctamente")
-                except Exception as e:
-                    print(f"✗ Error cargando comando {filename}: {e}")
-        
-        # Sincronizar comandos con Discord
+                await self.load_extension(f'commands.{filename[:-3]}')
         await self.tree.sync()
-        print("✓ Comandos sincronizados con Discord")
 
 bot = SilentBot()
 
 async def web_server():
-    """Servidor web simple para verificar que el bot está en funcionamiento"""
     app = web.Application()
     app.router.add_get('/', lambda request: web.Response(text="Bot is running!"))
     runner = web.AppRunner(app)
@@ -43,7 +34,6 @@ async def web_server():
     port = int(os.environ.get('PORT', 10000))
     site = web.TCPSite(runner, host='0.0.0.0', port=port)
     await site.start()
-    print(f"✓ Servidor web iniciado en el puerto {port}")
 
 @bot.event
 async def on_ready():
@@ -96,10 +86,6 @@ async def on_ready():
     ===================================================
     """
     
-    print(f"\n✓ Bot conectado como {bot.user.name}")
-    print(f"✓ ID del bot: {bot.user.id}")
-    print("===========================================")
-    
     # ==============================================
     # CONFIGURACIÓN DEL ESTADO - EDITA ESTAS VARIABLES
     # ==============================================
@@ -115,7 +101,7 @@ async def on_ready():
         'listening': discord.ActivityType.listening,
         'watching': discord.ActivityType.watching,
         'competing': discord.ActivityType.competing,
-        'none': None
+        'none': None  # Nueva opción para sin actividad
     }
 
     # Mapear estados
@@ -129,7 +115,7 @@ async def on_ready():
 
     # Configurar actividad (o ninguna)
     if activity_type == 'none':
-        activity = None
+        activity = None  # Sin actividad
     else:
         activity = discord.Activity(
             type=activity_dict.get(activity_type, discord.ActivityType.playing),
@@ -141,24 +127,12 @@ async def on_ready():
         activity=activity,
         status=status_dict.get(status_type, discord.Status.online)
     )
-    
-    print(f"✓ Estado configurado: {status_type}")
-    if activity:
-        print(f"✓ Actividad configurada: {activity_type} - {activity_name}")
 
     # Iniciar el servidor web
     asyncio.create_task(web_server())
 
-def main():
-    """Función principal para ejecutar el bot"""
-    token = os.getenv('DISCORD_TOKEN')
-    if token:
-        print("Iniciando bot...")
-        bot.run(token)
-    else:
-        print("ERROR: Token no encontrado")
-        exit(1)
-
-# Este if asegura que el bot solo se ejecute cuando se llama directamente
-if __name__ == "__main__":
-    main()
+token = os.getenv('DISCORD_TOKEN')
+if token:
+    bot.run(token)
+else:
+    exit("Token no encontrado")
