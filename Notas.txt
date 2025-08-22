@@ -1,0 +1,11 @@
+Este repositorio se compone de:
+
+  - Commands, una carpeta donde añadir cualquier slash command que se quiera ejecutar en el bot. La carpeta necesita obligatoriamente un archivo vacio llamado '__init__.py', para que el script que maneja el bot,
+  sepa que ahí se guardan los scripts para el slash command.
+    · El bot necesita "gateway intents"  y administrator (para todos los permisos) para poder funcionar.
+
+  - Procfile, un archivo que indica que archivo es el principal, el que hay que iniciar primero.
+
+  - main.py, el archivo principal, ejecuta tanto el bot como los scripts en el repositorio.
+
+  - requirements.txt, un archivo que ejecuta e instala las dependencias necesarias para que los scripts se carguen correctamente.
