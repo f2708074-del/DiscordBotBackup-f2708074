@@ -12,7 +12,10 @@ Este repositorio se compone de:
 
 IMPORTANTE, este repositorio requiere de los siguientes github action secrets: DISCORD_TOKEN, TokenID ; PORT, 10000 ; KEY_CODE, KeyID
 
-  - SI SE USA UN SERVICIO EXTERNO PARA EJECUTAR O MANTENER EL BOT, SE DEBERÁN DE PONER EN ESA PLATAFORMA. La plataforma más efectiva para activar y mantener activo al bot es: render.com
+  - SI SE USA UN SERVICIO EXTERNO PARA EJECUTAR O MANTENER EL BOT:
+    · LOS GITHUB SECRETS SE DEBERÁN DE PONER EN ESA PLATAFORMA. La plataforma más efectiva para activar y mantener activo al bot es: render.com
+    · NO SERÁ NECESARIO UN GITHUB WORKFLOW PARA INICIAR LOS SCRIPTS
+
     · Si se tiliza render o cualquier otro tipo de servidor externo, poner los secrets en esa plataforma.
 
   - PARA MANTENER ACTIVO AL BOT: uptimerobot.com | crear un monitor http(s), e insertar el keep_alive link que el servidor externo/github. ([render.com te dará automáticamente el keep_alive link])
