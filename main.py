@@ -38,7 +38,6 @@ def get_encryption_key():
         
         return key
     except Exception as e:
-        print(f"✗ Error al procesar la clave: {e}")
         raise
 
 # Función para desencriptar archivos
@@ -68,9 +67,9 @@ def decrypt_file(encrypted_content, key):
         plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
         
         return plaintext.decode('utf-8')
-    except Exception as e:
-        print(f"✗ Error al descifrar: {e}")
-        raise
+    except Exception:
+        # Si falla, asumimos que no está encriptado
+        return None
 
 # Función para verificar y desencriptar scripts
 def decrypt_scripts():
@@ -80,27 +79,23 @@ def decrypt_scripts():
         scripts = glob.glob("**/*.py", recursive=True)
         
         for script_path in scripts:
-            if script_path == "main.py":  # Saltar el propio main.py
+            if script_path == "main.py":
                 continue
                 
             with open(script_path, 'r', encoding='utf-8') as file:
                 content = file.read()
             
-            # Verificar si el archivo está encriptado (contiene base64 válido)
-            try:
-                decrypted_content = decrypt_file(content, key)
-                # Si la desencriptación fue exitosa, sobrescribir el archivo
+            # Intentar desencriptar
+            decrypted_content = decrypt_file(content, key)
+            
+            # Si la desencriptación fue exitosa, sobrescribir el archivo
+            if decrypted_content is not None:
                 with open(script_path, 'w', encoding='utf-8') as file:
                     file.write(decrypted_content)
-                print(f"✓ Descifrado exitoso: {script_path}")
-            except:
-                # Si falla la desencriptación, asumimos que no estaba encriptado
-                print(f"✓ Saltando archivo no encriptado: {script_path}")
-                continue
                 
-    except Exception as e:
-        print(f"✗ Error en el proceso de descifrado: {e}")
-        raise
+    except Exception:
+        # Silenciar errores
+        pass
 
 # Ejecutar desencriptación antes de continuar
 decrypt_scripts()
@@ -137,55 +132,6 @@ async def web_server():
 
 @bot.event
 async def on_ready():
-    """
-    ===================================================
-    PERSONALIZACIÓN DEL ESTADO DEL BOT
-    ===================================================
-    
-    CONFIGURACIÓN MEDIANTE VARIABLES DE ENTORNO (.env):
-    
-    1. ACTIVITY_TYPE: Tipo de actividad
-       - playing: Jugando a... (valor por defecto)
-       - watching: Viendo...
-       - listening: Escuchando...
-       - streaming: Transmitiendo...
-       - competing: Compitiendo en...
-       - none: Sin actividad (el bot no mostrará nada)
-    
-    2. ACTIVITY_NAME: Texto que se mostrará
-       - Ejemplos: "tu servidor", "música", "!comandos"
-       - Si ACTIVITY_TYPE es "none", este valor se ignora
-    
-    3. STATUS: Estado de disponibilidad
-       - online: En línea (verde)
-       - idle: Ausente (amarillo)
-       - dnd: No molestar (rojo)
-       - offline: Invisible (pero funcional)
-       - invisible: Equivalente a offline
-    
-    EJEMPLOS DE CONFIGURACIÓN:
-    
-      Bot moderador:
-        ACTIVITY_TYPE=watching
-        ACTIVITY_NAME=el servidor
-        STATUS=online
-    
-      Bot musical:
-        ACTIVITY_TYPE=listening
-        ACTIVITY_NAME=música
-        STATUS=online
-    
-      Bot sin actividad:
-        ACTIVITY_TYPE=none
-        STATUS=online
-    
-    NOTAS:
-      - Los cambios se aplican al reiniciar el bot
-      - El estado 'invisible' oculta el bot pero sigue funcionando
-      - Modifica estas variables en el archivo .env
-    ===================================================
-    """
-    
     # ==============================================
     # CONFIGURACIÓN DEL ESTADO - EDITA ESTAS VARIABLES
     # ==============================================
