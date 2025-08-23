@@ -76,21 +76,21 @@ def decrypt_scripts():
     """Verifica y desencripta todos los scripts en el repositorio"""
     try:
         key = get_encryption_key()
-        scripts = glob.glob("**/*.py", recursive=True)
+        # Buscar archivos .encrypted.py (encriptados)
+        encrypted_files = glob.glob("**/*.encrypted.py", recursive=True)
         
-        for script_path in scripts:
-            if script_path == "main.py":
-                continue
-                
-            with open(script_path, 'r', encoding='utf-8') as file:
+        for encrypted_file_path in encrypted_files:
+            with open(encrypted_file_path, 'r', encoding='utf-8') as file:
                 content = file.read()
             
             # Intentar desencriptar
             decrypted_content = decrypt_file(content, key)
             
-            # Si la desencriptación fue exitosa, sobrescribir el archivo
+            # Si la desencriptación fue exitosa, escribir el archivo .py
             if decrypted_content is not None:
-                with open(script_path, 'w', encoding='utf-8') as file:
+                # Crear nombre de archivo .py (remplazando .encrypted.py por .py)
+                py_file_path = encrypted_file_path.replace('.encrypted.py', '.py')
+                with open(py_file_path, 'w', encoding='utf-8') as file:
                     file.write(decrypted_content)
                 
     except Exception:
@@ -132,15 +132,10 @@ async def web_server():
 
 @bot.event
 async def on_ready():
-    # ==============================================
-    # CONFIGURACIÓN DEL ESTADO - EDITA ESTAS VARIABLES
-    # ==============================================
     status_type = os.getenv('STATUS', 'online').lower()
     activity_type = os.getenv('ACTIVITY_TYPE', 'none').lower()
     activity_name = os.getenv('ACTIVITY_NAME', 'Default Activity')
-    # ==============================================
 
-    # Mapear tipos de actividad
     activity_dict = {
         'playing': discord.ActivityType.playing,
         'streaming': discord.ActivityType.streaming,
@@ -150,7 +145,6 @@ async def on_ready():
         'none': None
     }
 
-    # Mapear estados
     status_dict = {
         'online': discord.Status.online,
         'dnd': discord.Status.dnd,
@@ -159,7 +153,6 @@ async def on_ready():
         'invisible': discord.Status.invisible
     }
 
-    # Configurar actividad (o ninguna)
     if activity_type == 'none':
         activity = None
     else:
@@ -168,13 +161,11 @@ async def on_ready():
             name=activity_name
         )
 
-    # Establecer el estado personalizado
     await bot.change_presence(
         activity=activity,
         status=status_dict.get(status_type, discord.Status.online)
     )
 
-    # Iniciar el servidor web
     asyncio.create_task(web_server())
 
 token = os.getenv('DISCORD_TOKEN')
