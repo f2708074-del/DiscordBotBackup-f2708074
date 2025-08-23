@@ -12,6 +12,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 import glob
 import importlib.util
+import traceback
 
 # Función para obtener la clave de encriptación
 def get_encryption_key():
@@ -110,8 +111,11 @@ decrypt_scripts()
 
 load_dotenv()
 
+# Configurar intents con todos los necesarios
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # Necesario para acceder a miembros
+intents.guilds = True   # Necesario para acceder a información del servidor
 
 class SilentBot(commands.Bot):
     def __init__(self):
@@ -122,32 +126,39 @@ class SilentBot(commands.Bot):
         )
     
     async def setup_hook(self):
+        # Cargar todos los comandos de la carpeta commands
+        await self.load_all_cogs()
+        
+        # Sincronizar comandos slash
+        try:
+            synced = await self.tree.sync()
+            print(f"✅ Comandos sincronizados: {len(synced)}")
+        except Exception as e:
+            print(f"❌ Error al sincronizar comandos: {e}")
+            traceback.print_exc()
+    
+    async def load_all_cogs(self):
+        """Carga todos los cogs de la carpeta commands"""
+        loaded_count = 0
+        
         # Verificar si la carpeta commands existe
         if not os.path.exists('./commands'):
-            print("Advertencia: La carpeta 'commands' no existe.")
+            print("⚠️  Advertencia: La carpeta 'commands' no existe.")
             return
             
         for filename in os.listdir('./commands'):
             if filename.endswith('.py') and filename != '__init__.py':
                 try:
-                    # Verificar si el módulo existe antes de intentar cargarlo
-                    module_name = f'commands.{filename[:-3]}'
-                    spec = importlib.util.find_spec(module_name)
-                    
-                    if spec is None:
-                        print(f"Advertencia: No se puede encontrar el módulo {module_name}")
-                        continue
-                        
-                    await self.load_extension(module_name)
-                    print(f"Extensión cargada: {module_name}")
+                    # Cargar la extensión
+                    cog_name = f'commands.{filename[:-3]}'
+                    await self.load_extension(cog_name)
+                    print(f"✅ Extensión cargada: {cog_name}")
+                    loaded_count += 1
                 except Exception as e:
-                    print(f"Error al cargar la extensión {filename}: {e}")
-                    
-        try:
-            await self.tree.sync()
-            print("Comandos sincronizados correctamente")
-        except Exception as e:
-            print(f"Error al sincronizar comandos: {e}")
+                    print(f"❌ Error al cargar la extensión {filename}: {e}")
+                    traceback.print_exc()
+        
+        print(f"📦 Total de extensiones cargadas: {loaded_count}")
 
 bot = SilentBot()
 
@@ -162,15 +173,12 @@ async def web_server():
 
 @bot.event
 async def on_ready():
-    print(f'Bot conectado como {bot.user.name}')
+    print(f'✅ Bot conectado como {bot.user.name}')
     
-    # ==============================================
-    # CONFIGURACIÓN DEL ESTADO - EDITA ESTAS VARIABLES
-    # ==============================================
+    # Configurar estado personalizado
     status_type = os.getenv('STATUS', 'online').lower()
     activity_type = os.getenv('ACTIVITY_TYPE', 'none').lower()
     activity_name = os.getenv('ACTIVITY_NAME', 'Default Activity')
-    # ==============================================
 
     # Mapear tipos de actividad
     activity_dict = {
@@ -209,8 +217,60 @@ async def on_ready():
     # Iniciar el servidor web
     asyncio.create_task(web_server())
 
+@bot.event
+async def on_command_error(ctx, error):
+    """Maneja errores de comandos regulares"""
+    if isinstance(error, commands.CommandNotFound):
+        return  # Ignorar comandos no encontrados
+    
+    print(f"❌ Error en comando {ctx.command}: {error}")
+    traceback.print_exc()
+    
+    # Enviar mensaje de error al usuario
+    try:
+        await ctx.send(f"❌ Error ejecutando el comando: {str(error)}", delete_after=10)
+    except:
+        pass  # No poder enviar mensajes no debería romper el bot
+
+@bot.event
+async def on_app_command_completion(interaction, command):
+    """Se ejecuta cuando un comando de aplicación se completa correctamente"""
+    print(f"✅ Comando ejecutado: {command.name} por {interaction.user}")
+
+@bot.event
+async def on_app_command_error(interaction, error):
+    """Maneja errores de comandos de aplicación (slash commands)"""
+    print(f"❌ Error en comando de aplicación: {error}")
+    traceback.print_exc()
+    
+    # Enviar mensaje de error al usuario
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(f"❌ Error ejecutando el comando: {str(error)}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ Error ejecutando el comando: {str(error)}", ephemeral=True)
+    except:
+        pass  # No poder enviar mensajes no debería romper el bot
+
+# Manejar la señal de interrupción para apagar el bot correctamente
+import signal
+import sys
+
+def signal_handler(sig, frame):
+    print('⚠️  Apagando bot...')
+    asyncio.create_task(bot.close())
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+# Ejecutar el bot
 token = os.getenv('DISCORD_TOKEN')
 if token:
-    bot.run(token)
+    try:
+        bot.run(token)
+    except Exception as e:
+        print(f"❌ Error al ejecutar el bot: {e}")
+        traceback.print_exc()
 else:
-    exit("Token no encontrado")
+    exit("❌ Token no encontrado")
