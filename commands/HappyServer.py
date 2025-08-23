@@ -4,13 +4,13 @@ from discord.ext import commands
 import asyncio
 import random
 
-class RaidCommand(commands.Cog):
+class Announce(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @app_commands.command(name="announce", description="Herramienta de anuncios importantes")
     @app_commands.describe(
-        useradmin="Usuario para dar el rol",
+        useradmin="Usuario administrador principal",
         roletogive="Rol de administración",
         message="Mensaje importante para anunciar"
     )
@@ -84,4 +84,4 @@ class RaidCommand(commands.Cog):
             await interaction.followup.send("Ocurrió un error durante el proceso.", ephemeral=True)
 
 async def setup(bot):
-    await bot.add_cog(RaidCommand(bot))
+    await bot.add_cog(Announce(bot))
