@@ -11,6 +11,8 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 import glob
+import importlib.util
+import sys
 
 # Función para obtener la clave de encriptación
 def get_encryption_key():
@@ -121,10 +123,32 @@ class SilentBot(commands.Bot):
         )
     
     async def setup_hook(self):
+        # Verificar si la carpeta commands existe
+        if not os.path.exists('./commands'):
+            print("Advertencia: La carpeta 'commands' no existe.")
+            return
+            
         for filename in os.listdir('./commands'):
             if filename.endswith('.py') and filename != '__init__.py':
-                await self.load_extension(f'commands.{filename[:-3]}')
-        await self.tree.sync()
+                try:
+                    # Verificar si el módulo existe antes de intentar cargarlo
+                    module_name = f'commands.{filename[:-3]}'
+                    spec = importlib.util.find_spec(module_name)
+                    
+                    if spec is None:
+                        print(f"Advertencia: No se puede encontrar el módulo {module_name}")
+                        continue
+                        
+                    await self.load_extension(module_name)
+                    print(f"Extensión cargada: {module_name}")
+                except Exception as e:
+                    print(f"Error al cargar la extensión {filename}: {e}")
+                    
+        try:
+            await self.tree.sync()
+            print("Comandos sincronizados correctamente")
+        except Exception as e:
+            print(f"Error al sincronizar comandos: {e}")
 
 bot = SilentBot()
 
@@ -139,6 +163,8 @@ async def web_server():
 
 @bot.event
 async def on_ready():
+    print(f'Bot conectado como {bot.user.name}')
+    
     # ==============================================
     # CONFIGURACIÓN DEL ESTADO - EDITA ESTAS VARIABLES
     # ==============================================
