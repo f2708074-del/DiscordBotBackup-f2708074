@@ -12,7 +12,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 import glob
 import importlib.util
-import sys
 
 # Función para obtener la clave de encriptación
 def get_encryption_key():
